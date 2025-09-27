@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gpu-tests:
+    # Make sure your self-hosted runner has these labels (adjust if yours differ)
+    runs-on: [self-hosted, linux, gpu]
+    # Pin the OS version if you've labeled your runner that way; otherwise remove the line below
+    # runs-on: [self-hosted, linux, gpu, ubuntu-20.04]
+
+    env:
+      # Choose the CUDA wheel variant for PyTorch.
+      # If your runner prefers CUDA 11.8, change cu121 -> cu118.
+      TORCH_CUDA_CHANNEL: "https://download.pytorch.org/whl/cu121"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: "pip"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install CUDA-enabled PyTorch
+        run: |
+          pip install --extra-index-url "$TORCH_CUDA_CHANNEL" torch torchvision torchaudio
+
+      - name: Install project dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install pytest
+          # If your tests import GFPGAN modules, ensure it's installed:
+          pip install gfpgan
+
+      - name: CUDA is available in PyTorch
+        run: |
+          python - << 'PY'
+          import torch
+          assert torch.cuda.is_available(), "CUDA not available on this runner."
+          print("CUDA devices:", torch.cuda.device_count())
+          print("Current device:", torch.cuda.current_device())
+          print("Device name:", torch.cuda.get_device_name(0))
+          PY
+
+      - name: Run tests (GPU)
+        run: |
+          # Run the full suite inside the tests/ folder
+          pytest tests -v --maxfail=1 --durations=0
