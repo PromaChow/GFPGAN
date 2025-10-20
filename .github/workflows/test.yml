@@ -9,7 +9,7 @@ on:
 jobs:
   gpu-tests:
     # Make sure your self-hosted runner has these labels (adjust if yours differ)
-    runs-on: [self-hosted, linux, gpu]
+    runs-on: ubuntu-latest
     # Pin the OS version if you've labeled your runner that way; otherwise remove the line below
     # runs-on: [self-hosted, linux, gpu, ubuntu-20.04]
 
