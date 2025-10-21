@@ -1,4 +1,4 @@
-name: CI
+name: GPU CI
 
 on:
   push:
@@ -8,31 +8,34 @@ on:
 
 jobs:
   gpu-tests:
-    # Make sure your self-hosted runner has these labels (adjust if yours differ)
-    runs-on: ubuntu-latest
-    # Pin the OS version if you've labeled your runner that way; otherwise remove the line below
-    # runs-on: [self-hosted, linux, gpu, ubuntu-20.04]
+    # Use your self-hosted GPU runner
+    runs-on: [self-hosted, gpu, linux]
 
     env:
-      # Choose the CUDA wheel variant for PyTorch.
-      # If your runner prefers CUDA 11.8, change cu121 -> cu118.
       TORCH_CUDA_CHANNEL: "https://download.pytorch.org/whl/cu121"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Free up disk space (just in case)
+        run: |
+          echo "Before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+          echo "After cleanup:"
+          df -h
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: "pip"
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
       - name: Install CUDA-enabled PyTorch
         run: |
+          pip install --upgrade pip
           pip install --extra-index-url "$TORCH_CUDA_CHANNEL" torch torchvision torchaudio
 
       - name: Install project dependencies
@@ -40,21 +43,16 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          pip install pytest
-          # If your tests import GFPGAN modules, ensure it's installed:
-          pip install gfpgan
+          pip install pytest gfpgan
 
-      - name: CUDA is available in PyTorch
+      - name: Verify CUDA availability
         run: |
-          python - << 'PY'
+          python - <<'PY'
           import torch
-          assert torch.cuda.is_available(), "CUDA not available on this runner."
-          print("CUDA devices:", torch.cuda.device_count())
-          print("Current device:", torch.cuda.current_device())
-          print("Device name:", torch.cuda.get_device_name(0))
+          assert torch.cuda.is_available(), "CUDA not available!"
+          print("✅ CUDA available with", torch.cuda.device_count(), "device(s)")
+          print("Device:", torch.cuda.get_device_name(0))
           PY
 
-      - name: Run tests (GPU)
-        run: |
-          # Run the full suite inside the tests/ folder
-          pytest tests -v --maxfail=1 --durations=0
+      - name: Run GPU tests
+        run: pytest tests -v --maxfail=1 --durations=0
